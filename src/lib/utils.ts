@@ -10,7 +10,7 @@ export function pickFirstString(obj: unknown, keys: string[]): string | undefine
   const record = obj as Record<string, unknown>;
   for (const key of keys) {
     const value = record[key];
-    if (typeof value === 'string' && value.length > 0) return value;
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
   }
   return undefined;
 }
@@ -38,7 +38,7 @@ function looksLikeJobId(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.length < 8) return false;
   if (/^https?:\/\//i.test(trimmed)) return false;
-  if (/^media/i.test(trimmed)) return false;
+  if (trimmed.includes('@')) return false;
   return /^[A-Za-z0-9_-]+$/.test(trimmed);
 }
 
@@ -72,15 +72,15 @@ export function extractUrls(obj: unknown, keys: string[]): string[] {
   const urls: string[] = [];
   const visit = (value: unknown) => {
     if (!value) return;
-    if (typeof value === 'object') {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+    } else if (typeof value === 'object') {
       const record = value as Record<string, unknown>;
       for (const key of keys) {
         const found = record[key];
         if (typeof found === 'string' && /^https?:\/\//.test(found)) urls.push(found);
       }
       for (const nested of Object.values(record)) visit(nested);
-    } else if (Array.isArray(value)) {
-      value.forEach(visit);
     }
   };
   visit(obj);
