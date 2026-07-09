@@ -15,11 +15,68 @@ export const videoCreateSchema = z.object({
 
 export type VideoCreateInput = z.infer<typeof videoCreateSchema>;
 
+export type VideoCreateResult = {
+  jobId: string;
+  raw: unknown;
+};
+
+const JOB_ID_KEYS = ['jobid', 'jobId', 'jobID', 'job_id'] as const;
+const JOB_ID_PATTERN = /^[A-Za-z0-9_:.\-/]+$/;
+
 function normalizeAspectRatio(value: '16:9' | '9:16') {
   return value === '16:9' ? 'landscape' : 'portrait';
 }
 
-export async function createVideo(input: VideoCreateInput) {
+export function isValidGoogleFlowJobId(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length < 8 || trimmed.length > 512) return false;
+  if (/^https?:\/\//i.test(trimmed)) return false;
+  if (trimmed.includes('@')) return false;
+  if (/[?#\s]/.test(trimmed)) return false;
+  return JOB_ID_PATTERN.test(trimmed);
+}
+
+function findJobIdByContract(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+
+  for (const key of JOB_ID_KEYS) {
+    const candidate = record[key];
+    if (isValidGoogleFlowJobId(candidate)) return candidate.trim();
+  }
+
+  const knownContainers = ['job', 'data', 'result', 'response'];
+  for (const key of knownContainers) {
+    const found = findJobIdByContract(record[key]);
+    if (found) return found;
+  }
+
+  return undefined;
+}
+
+function summarizeProviderShape(value: unknown) {
+  if (!value || typeof value !== 'object') return typeof value;
+  const record = value as Record<string, unknown>;
+  return {
+    keys: Object.keys(record),
+    jobFields: JOB_ID_KEYS.reduce<Record<string, string>>((acc, key) => {
+      const field = record[key];
+      if (typeof field === 'string') acc[key] = field.slice(0, 80);
+      return acc;
+    }, {})
+  };
+}
+
+export function parseVideoCreateResult(raw: unknown): VideoCreateResult {
+  const jobId = findJobIdByContract(raw);
+  if (!jobId) {
+    throw new Error(`Không nhận được jobid hợp lệ từ useapi.net. Provider shape: ${JSON.stringify(summarizeProviderShape(raw))}`);
+  }
+  return { jobId, raw };
+}
+
+export async function createVideo(input: VideoCreateInput): Promise<VideoCreateResult> {
   await ensureHealthyAccount();
   const { email } = getServerEnv();
   const body: Record<string, unknown> = {
@@ -36,20 +93,23 @@ export async function createVideo(input: VideoCreateInput) {
   input.references.forEach((ref, index) => {
     body[`referenceImage_${index + 1}`] = ref;
   });
-  return useapiFetch<unknown>('/videos', {
+
+  const raw = await useapiFetch<unknown>('/videos', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
+
+  return parseVideoCreateResult(raw);
 }
 
 export async function getVideoJob(jobId: string) {
   const cleanJobId = jobId.trim();
-  if (!cleanJobId) {
-    throw new Error('Thiếu jobId');
+  if (!isValidGoogleFlowJobId(cleanJobId)) {
+    throw new Error('JobId không hợp lệ, không gửi request poll sang useapi.net');
   }
 
   // useapi.net documents jobId as a path parameter for /jobs/{jobId}.
-  // Always URL-encode it so characters such as ':' or '/' are preserved as one path segment.
+  // Always URL-encode it so special characters remain one safe path segment.
   return useapiFetch<unknown>(`/jobs/${encodeURIComponent(cleanJobId)}`);
 }
