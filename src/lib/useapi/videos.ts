@@ -44,5 +44,10 @@ export async function createVideo(input: VideoCreateInput) {
 }
 
 export async function getVideoJob(jobId: string) {
-  return useapiFetch<unknown>(`/jobs/${encodeURIComponent(jobId)}`);
+  const cleanJobId = jobId.trim();
+
+  // useapi.net Google Flow job IDs may contain ':' characters.
+  // Their /jobs/{jobId} endpoint expects the original job id in the path.
+  // Encoding ':' as %3A can trigger "Invalid job ID format", so keep the id raw.
+  return useapiFetch<unknown>(`/jobs/${cleanJobId}`);
 }
