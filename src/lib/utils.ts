@@ -39,7 +39,10 @@ function looksLikeJobId(value: string): boolean {
   if (trimmed.length < 8) return false;
   if (/^https?:\/\//i.test(trimmed)) return false;
   if (trimmed.includes('@')) return false;
-  return /^[A-Za-z0-9_-]+$/.test(trimmed);
+
+  // useapi.net Google Flow job IDs can include ':' characters.
+  // Do not reject them, because Next route encodes the id before calling /jobs/{jobId}.
+  return /^[A-Za-z0-9_:\-.]+$/.test(trimmed);
 }
 
 export function extractJobId(obj: unknown): string | undefined {
