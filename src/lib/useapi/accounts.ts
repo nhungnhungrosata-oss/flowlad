@@ -1,6 +1,7 @@
 import { getServerEnv } from './env';
 import { UseApiError } from './errors';
 import { useapiFetch } from './client';
+import { configureCaptchaProviderIfAvailable } from './captcha';
 
 export type FlowAccount = Record<string, unknown>;
 
@@ -29,6 +30,7 @@ export async function getAccount() {
 }
 
 export async function ensureHealthyAccount() {
+  await configureCaptchaProviderIfAvailable();
   const account = await getAccount();
   if (account.health.toUpperCase() !== 'OK') {
     throw new UseApiError(`Account health lỗi: ${account.health}`, 400, account.account);
