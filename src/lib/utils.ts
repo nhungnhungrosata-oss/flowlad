@@ -34,8 +34,38 @@ export function extractMediaGenerationId(obj: unknown): string | undefined {
   return undefined;
 }
 
+function looksLikeJobId(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 8) return false;
+  if (/^https?:\/\//i.test(trimmed)) return false;
+  if (/^media/i.test(trimmed)) return false;
+  return /^[A-Za-z0-9_-]+$/.test(trimmed);
+}
+
 export function extractJobId(obj: unknown): string | undefined {
-  return pickFirstString(obj, ['jobId', 'jobid', 'id']);
+  if (!obj || typeof obj !== 'object') return undefined;
+
+  const record = obj as Record<string, unknown>;
+  const directKeys = ['jobId', 'jobid', 'jobID', 'job_id'];
+
+  for (const key of directKeys) {
+    const value = record[key];
+    if (typeof value === 'string' && looksLikeJobId(value)) return value.trim();
+  }
+
+  for (const value of Object.values(record)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = extractJobId(item);
+        if (found) return found;
+      }
+    } else if (value && typeof value === 'object') {
+      const found = extractJobId(value);
+      if (found) return found;
+    }
+  }
+
+  return undefined;
 }
 
 export function extractUrls(obj: unknown, keys: string[]): string[] {
