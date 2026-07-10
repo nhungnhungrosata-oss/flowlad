@@ -21,7 +21,11 @@ export type VideoCreateResult = {
 };
 
 const JOB_ID_KEYS = ['jobid', 'jobId', 'jobID', 'job_id'] as const;
-const JOB_ID_PATTERN = /^[A-Za-z0-9_:.\-/]+$/;
+
+// Real Google Flow job ids from useapi.net include account metadata, for example:
+// j0710012726614091522v-u2916-email:user@example.com-bot:google-flow
+// Keep validation strict against path/query injection, but allow '@' because it is part of the provider job id.
+const JOB_ID_PATTERN = /^[A-Za-z0-9_:.\-/@]+$/;
 
 function normalizeAspectRatio(value: '16:9' | '9:16') {
   return value === '16:9' ? 'landscape' : 'portrait';
@@ -32,7 +36,6 @@ export function isValidGoogleFlowJobId(value: unknown): value is string {
   const trimmed = value.trim();
   if (trimmed.length < 8 || trimmed.length > 512) return false;
   if (/^https?:\/\//i.test(trimmed)) return false;
-  if (trimmed.includes('@')) return false;
   if (/[?#\s]/.test(trimmed)) return false;
   return JOB_ID_PATTERN.test(trimmed);
 }
@@ -62,7 +65,7 @@ function summarizeProviderShape(value: unknown) {
     keys: Object.keys(record),
     jobFields: JOB_ID_KEYS.reduce<Record<string, string>>((acc, key) => {
       const field = record[key];
-      if (typeof field === 'string') acc[key] = field.slice(0, 80);
+      if (typeof field === 'string') acc[key] = field.slice(0, 120);
       return acc;
     }, {})
   };
@@ -110,6 +113,6 @@ export async function getVideoJob(jobId: string) {
   }
 
   // useapi.net documents jobId as a path parameter for /jobs/{jobId}.
-  // Always URL-encode it so special characters remain one safe path segment.
+  // Always URL-encode it so ':' '@' '/' and other special characters remain one safe path segment.
   return useapiFetch<unknown>(`/jobs/${encodeURIComponent(cleanJobId)}`);
 }
